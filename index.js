@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import Exercise from './models/exercises.js';
 import Treino from './models/treinos.js';
 import User from './models/user.js';
+import upload from "./middleware/multer.js"
+import { cloudinary } from "./utils/cloudinary.js";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -183,32 +185,67 @@ app.delete("/treinos/:id", async (req, res) => {
 
 
 /* Rotas Usuário */
-app.post("/users", async (request, response) => {
-  const user = request.body;
 
-  const newUser = await User.create(user);
+/* image upload function */
+const handleUpload = async (req, res, next) => {
+  try {
+    // Verificar se foi feito o upload da imagem
+    if (!req.file) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No file uploaded" });
+    }
 
-  return response.json(newUser);
-});
+    // Upload da imagem para o Cloudinary
+    const result = await cloudinary.uploader.upload(req.file.path);
 
+    // Adicionar a URL da imagem no objeto de usuário
+    req.body.imageProfile = result.secure_url;
+
+    next();
+  } catch (error) {
+    console.error("Error uploading file to Cloudinary:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Error uploading file" });
+  }
+};
+
+// Rota para criar um novo usuário
+app.post(
+  "/users",
+  upload.single("imageProfile"),
+  handleUpload,
+  async (request, response) => {
+    const userData = request.body;
+
+    try {
+      const newUser = await User.create(userData);
+      return response.json(newUser);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      return response.status(500).send("Internal Server Error");
+    }
+  }
+);
+
+// Rota para obter todos os usuários
 app.get("/users", async (req, res) => {
   try {
-    const user = await User.aggregate([
-      {
-        $lookup: {
-          from: "treinos",
-          localField: "treino",
-          foreignField: "_id",
-          as: "treinoResult",
-        },
-      },
-    ]);
+    const users = await User.find();
 
-    res.json(user);
+    // Mapear os usuários para adicionar o link da imagem do Cloudinary
+    const usersWithImageUrl = users.map((user) => ({
+      ...user.toObject(),
+      imageProfile: user.imageProfile ? user.imageProfile : null,
+    }));
+
+    res.json(usersWithImageUrl);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
 app.get("/users/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -265,7 +302,7 @@ app.patch("/user/:id", async (req, res) => {
     return res.status(500).send("Internal Server Error");
   }
 });
-app.delete("/user/:id", async (req, res) => {
+app.delete("/users/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -281,6 +318,8 @@ app.delete("/user/:id", async (req, res) => {
     return res.status(500).send("Internal Server Error");
   }
 });
+
+
 app.listen(port, (err) => {
     if (err) console.log(`error message: ${err}`);
     console.log(`Server listening on http://localhost:${port}`);
