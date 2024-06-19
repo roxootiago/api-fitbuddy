@@ -5,7 +5,7 @@ import Treino from './models/treinos.js';
 import User from './models/user.js';
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.json());
 
@@ -207,6 +207,22 @@ app.get("/users", async (req, res) => {
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+app.get("/users/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const user = await User.findById(id);
+
+    if (user) {
+      return res.json(user);
+    } else {
+      return res.status(404).send("User not found");
+    }
+  } catch (error) {
+    console.error("User fetching exercise:", error);
+    return res.status(500).send("Internal Server Error");
   }
 });
 
